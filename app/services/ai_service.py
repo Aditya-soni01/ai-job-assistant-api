@@ -118,6 +118,106 @@ Focus on:
             logger.error(f"Error optimizing resume: {e}")
             return {"status": "error", "message": str(e)}
 
+    def optimize_resume_for_job(
+        self,
+        resume_text: str,
+        job_description: str,
+        job_title: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Fully rewrite a resume tailored to a specific job description.
+        Returns structured JSON with all resume sections + ATS scoring.
+        """
+        self._clear_history()
+
+        prompt = f"""You are a professional resume writer and ATS optimization expert.
+
+Rewrite the following resume to be perfectly tailored for the job description provided.
+
+REQUIREMENTS:
+1. Maximize ATS (Applicant Tracking System) compatibility
+2. Integrate relevant keywords from the job description naturally
+3. Quantify achievements with metrics/numbers wherever possible
+4. Use strong action verbs (Led, Built, Increased, Reduced, Delivered, Architected, etc.)
+5. Preserve all existing sections: Summary, Skills, Experience, Education, Projects
+6. Remove irrelevant information
+7. Professional and concise tone throughout
+
+RESUME:
+{resume_text}
+
+JOB DESCRIPTION:
+{job_description}
+
+{f'JOB TITLE: {job_title}' if job_title else ''}
+
+Return ONLY a valid JSON object — no extra text, no markdown fences:
+{{
+    "full_name": "Full Name from resume",
+    "contact": "email | phone | location",
+    "summary": "2-3 sentence tailored professional summary aligned to the JD",
+    "skills": ["skill1", "skill2", "skill3"],
+    "experience": [
+        {{
+            "title": "Job Title",
+            "company": "Company Name",
+            "duration": "Month Year - Month Year",
+            "achievements": [
+                "Quantified achievement using JD keywords",
+                "Another strong achievement with business impact"
+            ]
+        }}
+    ],
+    "education": [
+        {{
+            "degree": "Degree Name",
+            "institution": "School Name",
+            "year": "Graduation Year"
+        }}
+    ],
+    "projects": [
+        {{
+            "name": "Project Name",
+            "description": "Brief description with relevant technologies",
+            "technologies": ["tech1", "tech2"]
+        }}
+    ],
+    "certifications": ["cert1", "cert2"],
+    "ats_score_before": 40,
+    "ats_score_after": 82,
+    "keywords_added": ["keyword1", "keyword2", "keyword3"]
+}}"""
+
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=4000,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            response_text = response.content[0].text
+
+            # Strip markdown fences if present
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0]
+
+            json_start = response_text.find("{")
+            json_end = response_text.rfind("}") + 1
+            if json_start == -1 or json_end <= json_start:
+                raise ValueError("No JSON object found in response")
+
+            structured = json.loads(response_text[json_start:json_end])
+            return {"status": "success", "data": structured, "timestamp": datetime.utcnow().isoformat()}
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse structured resume JSON: {e}")
+            return {"status": "error", "message": "AI returned malformed JSON"}
+        except Exception as e:
+            logger.error(f"Error in optimize_resume_for_job: {e}")
+            return {"status": "error", "message": str(e)}
+
     def generate_cover_letter(
         self,
         resume_text: str,

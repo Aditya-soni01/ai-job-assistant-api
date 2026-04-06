@@ -6,7 +6,10 @@
       "Bash(cmd /c \"cd /d d:\\\\Agent_APPs\\\\ai-job-assistant-api\\\\frontend && npx tsc --noEmit 2>&1\")",
       "Bash(cmd /c \"cd /d d:\\\\Agent_APPs\\\\ai-job-assistant-api\\\\frontend && npx vite build\")",
       "Bash(echo \"exit: $?\")",
-      "Bash(taskkill /F /IM python.exe)"
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(code-review-graph --help)",
+      "Bash(code-review-graph build:*)",
+      "Bash(claude run:*)"
     ]
   }
 }
