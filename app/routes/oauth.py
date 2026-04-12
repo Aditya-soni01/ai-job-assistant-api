@@ -19,7 +19,8 @@ auth_service = AuthService()
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
-FRONTEND_URL = "http://localhost:5173"
+# FRONTEND_URL = "http://localhost:5173"
+FRONTEND_URL = "https://purple-chinchilla-156551.hostingersite.com"
 
 
 def _make_token_response(user: User) -> dict:
@@ -85,7 +86,8 @@ async def google_login():
         raise HTTPException(status_code=501, detail="Google OAuth is not configured.")
     params = {
         "client_id": settings.google_client_id,
-        "redirect_uri": f"http://localhost:8001/api/auth/oauth/google/callback",
+        # "redirect_uri": f"http://localhost:8001/api/auth/oauth/google/callback",
+        "redirect_uri": "https://rolegenie-backend.onrender.com/api/auth/oauth/google/callback",
         "response_type": "code",
         "scope": "openid email profile",
         "access_type": "offline",
@@ -107,7 +109,8 @@ async def google_callback(
                 "code": code,
                 "client_id": settings.google_client_id,
                 "client_secret": settings.google_client_secret,
-                "redirect_uri": f"http://localhost:8001/api/auth/oauth/google/callback",
+                # "redirect_uri": f"http://localhost:8001/api/auth/oauth/google/callback",
+                "redirect_uri": "https://rolegenie-backend.onrender.com/api/auth/oauth/google/callback",
                 "grant_type": "authorization_code",
             },
         )
@@ -155,7 +158,8 @@ async def github_login():
         raise HTTPException(status_code=501, detail="GitHub OAuth is not configured.")
     params = {
         "client_id": settings.github_client_id,
-        "redirect_uri": f"http://localhost:8001/api/auth/oauth/github/callback",
+        # "redirect_uri": f"http://localhost:8001/api/auth/oauth/github/callback",
+        "redirect_uri": "https://rolegenie-backend.onrender.com/api/auth/oauth/github/callback",
         "scope": "user:email read:user",
     }
     return RedirectResponse(url=f"{GITHUB_AUTH_URL}?{urlencode(params)}")
@@ -174,7 +178,8 @@ async def github_callback(
                 "client_id": settings.github_client_id,
                 "client_secret": settings.github_client_secret,
                 "code": code,
-                "redirect_uri": f"http://localhost:8001/api/auth/oauth/github/callback",
+                # "redirect_uri": f"http://localhost:8001/api/auth/oauth/github/callback",
+                "redirect_uri": "https://rolegenie-backend.onrender.com/api/auth/oauth/github/callback",
             },
             headers={"Accept": "application/json"},
         )
