@@ -1,4 +1,4 @@
-# Graph Report - graphify-in  (2026-04-12)
+`# Graph Report - graphify-in  (2026-04-12)
 
 ## Corpus Check
 - Corpus is ~591 words - fits in a single context window. You may not need a graph.

@@ -5,12 +5,9 @@ import AppLayout from '@/components/layout/AppLayout';
 import LoginPage from '@/pages/LoginPage';
 import OAuthCallbackPage from '@/pages/OAuthCallbackPage';
 import DashboardPage from '@/pages/DashboardPage';
-import JobsPage from '@/pages/JobsPage';
-import JobDetailPage from '@/pages/JobDetailPage';
 import ResumePage from '@/pages/ResumePage';
 import ProfilePage from '@/pages/ProfilePage';
 import SettingsPage from '@/pages/SettingsPage';
-import NotificationsPage from '@/pages/NotificationsPage';
 import SupportPage from '@/pages/SupportPage';
 import { isAuthenticated } from '@/store/authStore';
 
@@ -47,12 +44,9 @@ const App: React.FC = () => {
           >
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="jobs" element={<JobsPage />} />
-            <Route path="jobs/:id" element={<JobDetailPage />} />
             <Route path="resume" element={<ResumePage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
-            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="support" element={<SupportPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

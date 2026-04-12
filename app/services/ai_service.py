@@ -399,6 +399,63 @@ Score breakdown:
             logger.error(f"Error scoring job match: {e}")
             return {"status": "error", "message": str(e)}
 
+    def improve_section(self, section: str, current_text: str, job_description: str) -> Dict[str, Any]:
+        """
+        Improve a specific resume section to better match a job description.
+
+        Args:
+            section: Section name (e.g. professional_summary, experience_0)
+            current_text: The current text of the section
+            job_description: Target job description for context
+
+        Returns:
+            Dictionary with improved_text and changes_made
+        """
+        section_label = section.replace("_", " ").replace("experience ", "experience entry ").title()
+        prompt = f"""You are an expert resume writer. Improve ONLY this {section_label} section to better match the job description.
+
+CURRENT {section_label.upper()}:
+{current_text}
+
+JOB DESCRIPTION:
+{job_description}
+
+Rules:
+- Use STAR method for experience bullets (Situation, Task, Action, Result)
+- Include relevant keywords from the JD naturally
+- Quantify achievements where possible
+- Keep the tone professional and concise
+- Do NOT add fictional data; only rewrite what is given
+
+Return ONLY valid JSON:
+{{"improved_text": "the rewritten section text", "changes_made": ["change1", "change2"]}}"""
+
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=1500,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            response_text = response.content[0].text.strip()
+            # Strip markdown fences if present
+            if response_text.startswith("```"):
+                response_text = response_text.split("```")[1]
+                if response_text.startswith("json"):
+                    response_text = response_text[4:]
+                response_text = response_text.strip()
+
+            result = json.loads(response_text)
+            return {
+                "improved_text": result.get("improved_text", current_text),
+                "changes_made": result.get("changes_made", []),
+            }
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse improve_section response: {e}")
+            return {"improved_text": current_text, "changes_made": []}
+        except Exception as e:
+            logger.error(f"Error improving section: {e}")
+            return {"status": "error", "message": str(e)}
+
     def extract_resume_data(self, resume_text: str) -> Dict[str, Any]:
         """
         Extract structured data from unstructured resume text.

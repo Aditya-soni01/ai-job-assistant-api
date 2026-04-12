@@ -10,7 +10,6 @@ import logging
 from app.core.database import get_db
 from app.schemas.resume import ResumeResponse
 from app.services.resume_service import ResumeService
-from app.services.job_service import JobService
 from app.services.auth_service import get_current_user
 from app.services.ai_service import AIService
 from app.models.user import User
@@ -351,7 +350,6 @@ async def upload_resume(
 @router.post("/{resume_id}/optimize")
 def optimize_resume(
     resume_id: int,
-    job_id: Optional[int] = Query(default=None),
     job_description: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -364,15 +362,6 @@ def optimize_resume(
     job_title = "Target Role"
     company_name = ""
     required_skills = ""
-
-    if job_id:
-        job = JobService.get_job_by_id(db, job_id)
-        if not job:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Job {job_id} not found")
-        jd_text = job.description or ""
-        job_title = job.title or "Target Role"
-        company_name = job.company or ""
-        required_skills = job.required_skills or ""
 
     if not jd_text.strip():
         raise HTTPException(

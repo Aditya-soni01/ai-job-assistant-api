@@ -413,6 +413,19 @@ class InterviewPrepResponse(BaseModel):
     })
 
 
+class SectionImproveRequest(BaseModel):
+    """Request schema for improving a specific resume section."""
+    section: str = Field(..., description="Section name (e.g. professional_summary, experience_0)")
+    current_text: str = Field(..., min_length=10, description="Current section text to improve")
+    job_description: str = Field(..., min_length=20, description="Target job description for context")
+
+
+class SectionImproveResponse(BaseModel):
+    """Response schema for section improvement."""
+    improved_text: str = Field(..., description="AI-improved section text")
+    changes_made: List[str] = Field(default_factory=list, description="List of changes applied")
+
+
 class AIErrorResponse(BaseModel):
     """Error response schema for AI operations."""
     detail: str = Field(..., description="Error message")

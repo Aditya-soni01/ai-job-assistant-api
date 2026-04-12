@@ -1,9 +1,7 @@
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 import logging
 
-from app.core.database import get_db
 from app.schemas.ai import (
     ResumeOptimizeRequest,
     ResumeOptimizeResponse,
@@ -12,10 +10,11 @@ from app.schemas.ai import (
     MatchScoreRequest,
     MatchScoreResponse,
     MatchDetail,
+    SectionImproveRequest,
+    SectionImproveResponse,
 )
 from app.services.ai_service import AIService
 from app.services.auth_service import get_current_user
-from app.services.job_service import JobService
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -33,7 +32,6 @@ ai_service = AIService(api_key="")
 )
 def optimize_resume(
     request: ResumeOptimizeRequest,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ResumeOptimizeResponse:
     """Optimize resume text for a specific job using AI analysis."""
@@ -82,7 +80,6 @@ def optimize_resume(
 )
 def generate_cover_letter(
     request: CoverLetterRequest,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> CoverLetterResponse:
     """Generate a personalized cover letter for a specific job."""
@@ -135,27 +132,16 @@ def generate_cover_letter(
 )
 def calculate_match_score(
     request: MatchScoreRequest,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> MatchScoreResponse:
     """Calculate how well a resume matches a specific job listing."""
-    if request.job_id:
-        job = JobService.get_job_by_id(db, request.job_id)
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with ID {request.job_id} not found",
-            )
-        job_description = job.description
-        job_title = job.title
-    else:
-        if not request.job_description or len(request.job_description.strip()) < 50:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Job description must contain at least 50 characters",
-            )
-        job_description = request.job_description
-        job_title = request.job_title or "Unspecified Position"
+    if not request.job_description or len(request.job_description.strip()) < 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job description must contain at least 50 characters",
+        )
+    job_description = request.job_description
+    job_title = request.job_title or "Unspecified Position"
 
     if not request.resume_text or len(request.resume_text.strip()) < 50:
         raise HTTPException(
@@ -212,4 +198,39 @@ def calculate_match_score(
         gaps=job_match.get("improvement_areas") or [],
         recommendations=[job_match.get("summary", "")] if job_match.get("summary") else [],
         match_category=category,
+    )
+
+
+@router.post(
+    "/improve-section",
+    response_model=SectionImproveResponse,
+    summary="Improve a specific resume section using AI",
+)
+def improve_section(
+    request: SectionImproveRequest,
+    current_user: User = Depends(get_current_user),
+) -> SectionImproveResponse:
+    """Rewrite a single resume section to better match the target job description."""
+    try:
+        result = ai_service.improve_section(
+            section=request.section,
+            current_text=request.current_text,
+            job_description=request.job_description,
+        )
+    except Exception as e:
+        logger.error(f"Section improvement error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to improve section. Please try again.",
+        )
+
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=result.get("message", "AI service error"),
+        )
+
+    return SectionImproveResponse(
+        improved_text=result.get("improved_text", request.current_text),
+        changes_made=result.get("changes_made", []),
     )

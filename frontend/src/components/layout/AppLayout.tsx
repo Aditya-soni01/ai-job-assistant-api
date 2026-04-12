@@ -1,18 +1,16 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom';
 import {
-  LayoutDashboard, Briefcase, Sparkles, User, Settings,
-  Bell, HelpCircle, LogOut, Search, Menu, X,
+  LayoutDashboard, Sparkles, User, Settings,
+  HelpCircle, LogOut, Search, Menu, X,
 } from 'lucide-react';
 import { authStore } from '@/store/authStore';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/jobs', icon: Briefcase, label: 'Jobs' },
   { to: '/resume', icon: Sparkles, label: 'Resume Optimizer' },
   { to: '/profile', icon: User, label: 'Profile' },
   { to: '/settings', icon: Settings, label: 'Settings' },
-  { to: '/notifications', icon: Bell, label: 'Notifications' },
   { to: '/support', icon: HelpCircle, label: 'Support' },
 ];
 
@@ -141,7 +139,7 @@ const AppLayout: React.FC = () => {
             <Search className="w-4 h-4 text-slate-500 flex-shrink-0" />
             <input
               type="text"
-              placeholder="Search roles, skills, or companies..."
+              placeholder="Search resumes, skills, or optimizations..."
               className="bg-transparent border-none focus:outline-none text-sm w-full text-[#d4e4fa] placeholder:text-slate-500"
             />
           </div>

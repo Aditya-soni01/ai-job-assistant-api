@@ -18,7 +18,14 @@
       "Read(//c/Users/milan/AppData/Local/Temp/claude/d--Agent-APPs-ai-job-assistant-api/1c87e5a4-0ac6-400a-b1de-a8158b8a1c19/tasks/**)",
       "Bash(wmic process:*)",
       "Read(//c/Users/milan/Downloads/**)",
-      "mcp__code-review-graph__semantic_search_nodes_tool"
+      "mcp__code-review-graph__semantic_search_nodes_tool",
+      "mcp__code-review-graph__get_architecture_overview_tool",
+      "Bash(rm \"d:/Agent_APPs/ai-job-assistant-api/frontend/src/pages/JobsPage.tsx\" \"d:/Agent_APPs/ai-job-assistant-api/frontend/src/pages/JobDetailPage.tsx\" \"d:/Agent_APPs/ai-job-assistant-api/frontend/src/pages/NotificationsPage.tsx\" \"d:/Agent_APPs/ai-job-assistant-api/frontend/src/components/jobs/JobCard.tsx\")",
+      "Bash(rm \"d:/Agent_APPs/ai-job-assistant-api/app/routes/jobs.py\" \"d:/Agent_APPs/ai-job-assistant-api/app/services/job_service.py\" \"d:/Agent_APPs/ai-job-assistant-api/app/services/seeder_service.py\" \"d:/Agent_APPs/ai-job-assistant-api/app/schemas/job.py\" \"d:/Agent_APPs/ai-job-assistant-api/app/data/mock_jobs.py\")",
+      "Bash(where python:*)",
+      "Bash(python3 -c \"print\\('hello'\\)\")",
+      "Read(//c/Users/milan/AppData/Local/Microsoft/WindowsApps/**)",
+      "Bash(/c/Users/milan/AppData/Local/Microsoft/WindowsApps/python3.exe -c \"import json; print\\(json.dumps\\({'test':1}\\)\\)\")"
     ]
   }
 }
