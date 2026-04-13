@@ -20,7 +20,7 @@ auth_service = AuthService()
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 # FRONTEND_URL = "http://localhost:5173"
-FRONTEND_URL = "https://purple-chinchilla-156551.hostingersite.com"
+FRONTEND_URL = "https://rolegenieai.com"
 
 
 def _make_token_response(user: User) -> dict:
