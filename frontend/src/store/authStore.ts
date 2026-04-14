@@ -4,6 +4,34 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import apiClient from '@/lib/api';
 
+/**
+ * Converts an Axios error into a human-readable auth error message.
+ * Distinguishes network/timeout failures from credential/server errors.
+ */
+function resolveAuthError(err: any, action: 'login' | 'register'): string {
+  // No response at all → network down, CORS, or Render cold-start timeout
+  if (!err.response) {
+    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+      return 'The server is taking too long to respond. It may be starting up — please wait a moment and try again.';
+    }
+    return 'Cannot reach the server. Check your internet connection and try again.';
+  }
+
+  const status: number = err.response.status;
+  const detail: string | undefined = err.response.data?.detail;
+
+  // Use backend's own message if available and specific enough
+  if (detail && status !== 500) return detail;
+
+  if (status === 401) return action === 'login' ? 'Invalid email or password.' : 'Authentication failed.';
+  if (status === 403) return 'Your account has been deactivated. Please contact support.';
+  if (status === 400) return detail ?? (action === 'register' ? 'Registration failed. Check the fields and try again.' : 'Bad request.');
+  if (status === 422) return 'Invalid input. Please check your email and password.';
+  if (status >= 500) return 'Server error. Please try again in a moment.';
+
+  return action === 'login' ? 'Login failed. Please try again.' : 'Registration failed. Please try again.';
+}
+
 export interface User {
   id: number;
   email: string;
@@ -54,8 +82,7 @@ export const authStore = create<AuthState>()(
           const meRes = await apiClient.get('/auth/me');
           set({ user: meRes.data, isLoading: false, error: null });
         } catch (err: any) {
-          const errorMessage =
-            err.response?.data?.detail || 'Login failed. Please try again.';
+          const errorMessage = resolveAuthError(err, 'login');
           set({ isLoading: false, error: errorMessage, user: null, accessToken: null });
           throw err;
         }
@@ -77,8 +104,7 @@ export const authStore = create<AuthState>()(
           const meRes = await apiClient.get('/auth/me');
           set({ user: meRes.data, isLoading: false, error: null });
         } catch (err: any) {
-          const errorMessage =
-            err.response?.data?.detail || 'Registration failed. Please try again.';
+          const errorMessage = resolveAuthError(err, 'register');
           set({ isLoading: false, error: errorMessage, user: null, accessToken: null });
           throw err;
         }

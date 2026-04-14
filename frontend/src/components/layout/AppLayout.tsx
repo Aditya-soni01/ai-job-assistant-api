@@ -106,6 +106,7 @@ const AppLayout: React.FC = () => {
               Unlock 100+ AI optimizations per month.
             </p>
             <button
+              onClick={() => { navigate('/subscription'); setSidebarOpen(false); }}
               className="w-full py-2.5 rounded-xl font-bold text-sm transition-opacity hover:opacity-90"
               style={{
                 background: 'linear-gradient(135deg, #d0bcff 0%, #4edea3 100%)',

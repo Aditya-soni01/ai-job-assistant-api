@@ -1,11 +1,15 @@
 from typing import Annotated
 import logging
+import secrets
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User
+from app.models.password_reset import PasswordResetToken
 from app.schemas.user import UserCreate, UserResponse, UserUpdate, PasswordChange
 from app.schemas.auth import Token, LoginRequest
 from app.services.auth_service import AuthService, get_current_user
@@ -177,3 +181,120 @@ async def change_password(
     current_user.hashed_password = auth_service.hash_password(data.new_password)
     db.commit()
     return {"message": "Password updated successfully"}
+
+
+# ── Forgot / Reset password ───────────────────────────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+RESET_TOKEN_EXPIRE_MINUTES = 30
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    data: ForgotPasswordRequest,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """
+    Generate a password-reset token for the given email.
+
+    Always returns 200 so callers cannot enumerate registered emails.
+    The reset_token is returned directly in the response for now (no email
+    service configured). TODO: deliver token via email (e.g. SendGrid / Resend)
+    when an email provider is added.
+    """
+    user = db.query(User).filter(User.email == data.email).first()
+
+    if not user:
+        # Return a convincing success response to prevent email enumeration
+        return {"message": "If this email is registered, a reset code has been sent."}
+
+    # Invalidate any existing unused tokens for this user
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used == False,  # noqa: E712
+    ).delete()
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        token=token,
+        expires_at=expires_at,
+    )
+    db.add(reset_token)
+    db.commit()
+
+    logger.info(f"Password reset token generated for user {user.email}")
+
+    # TODO: Send token via email when an email service is configured.
+    # For now, return the token directly so the feature is usable without email.
+    return {
+        "message": "If this email is registered, a reset code has been sent.",
+        "reset_token": token,         # Remove this field once email delivery is wired
+        "expires_in_minutes": RESET_TOKEN_EXPIRE_MINUTES,
+    }
+
+
+@router.post("/reset-password")
+async def reset_password(
+    data: ResetPasswordRequest,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """
+    Reset a user's password using a valid reset token.
+    Validates the token is unused and not expired, then updates the password.
+    """
+    if len(data.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="New password must be at least 8 characters.",
+        )
+
+    reset_record = (
+        db.query(PasswordResetToken)
+        .filter(PasswordResetToken.token == data.token)
+        .first()
+    )
+
+    if not reset_record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset code. Please request a new one.",
+        )
+
+    if reset_record.used:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset code has already been used.",
+        )
+
+    if reset_record.is_expired():
+        db.delete(reset_record)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset code has expired. Please request a new one.",
+        )
+
+    user = db.query(User).filter(User.id == reset_record.user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid reset code.",
+        )
+
+    user.hashed_password = auth_service.hash_password(data.new_password)
+    reset_record.used = True
+    db.commit()
+
+    logger.info(f"Password reset successfully for user {user.email}")
+    return {"message": "Password reset successfully. You can now log in with your new password."}

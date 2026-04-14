@@ -9,6 +9,7 @@ from app.core.database import engine, Base
 from app.routes import auth, ai, resumes
 from app.routes import oauth
 from app.models import resume as _resume_model  # noqa: F401 — ensures table is created
+from app.models import password_reset as _password_reset_model  # noqa: F401 — ensures table is created
 
 logger = logging.getLogger(__name__)
 

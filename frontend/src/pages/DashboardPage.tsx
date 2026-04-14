@@ -227,7 +227,7 @@ const DashboardPage: React.FC = () => {
               </p>
             </div>
             <button
-              onClick={() => navigate('/settings')}
+              onClick={() => navigate('/subscription')}
               className="text-xs font-bold px-4 py-2 rounded-lg transition-opacity hover:opacity-90 flex-shrink-0"
               style={{ background: 'linear-gradient(135deg, #d0bcff 0%, #4edea3 100%)', color: '#340080' }}
             >
