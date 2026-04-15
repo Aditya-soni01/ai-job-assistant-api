@@ -4,10 +4,12 @@ import { useLocation } from 'react-router-dom';
 import {
   Upload, FileText, Trash2, Zap, X,
   CheckCircle, AlertCircle, TrendingUp, Tag, FileDown,
-  ChevronRight, Sparkles, Copy, BarChart2,
+  ChevronRight, Sparkles, Copy, BarChart2, LayoutTemplate,
 } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { authStore } from '@/store/authStore';
+import TemplateSelector from '@/components/resume/TemplateSelector';
+import { RESUME_TEMPLATES } from '@/data/resumeTemplates';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -186,39 +188,53 @@ const SkillPill: React.FC<{ label: string; variant: 'matched' | 'missing' | 'nic
   );
 };
 
-const ResumePreview: React.FC<{ data: OptimizedResume }> = ({ data }) => {
+// Look up accent colour from the new template data file
+function getTemplateAccent(templateId: string): string {
+  return RESUME_TEMPLATES.find((t) => t.id === templateId)?.colorScheme.primary ?? '#1a56db';
+}
+
+const ResumePreview: React.FC<{ data: OptimizedResume; accentColor?: string }> = ({
+  data,
+  accentColor = '#1a56db',
+}) => {
   const contactLine = [data.contact?.email, data.contact?.phone, data.contact?.location].filter(Boolean).join(' | ');
   const linkLine = [data.contact?.linkedin, data.contact?.portfolio].filter(Boolean).join(' · ');
   return (
     <div className="rounded-2xl bg-white text-slate-900 p-10 shadow-2xl font-sans text-sm leading-relaxed">
-      <div className="text-center mb-6 pb-4 border-b-2 border-slate-100">
+      {/* Header */}
+      <div className="text-center mb-6 pb-4" style={{ borderBottom: `2px solid ${accentColor}` }}>
         <h1 className="text-2xl font-bold text-slate-900 mb-1">{data.full_name}</h1>
-        {contactLine && <p className="text-slate-500 text-xs">{contactLine}</p>}
+        {contactLine && <p className="text-slate-500 text-xs mt-1">{contactLine}</p>}
         {linkLine && <p className="text-slate-400 text-xs mt-0.5">{linkLine}</p>}
       </div>
+
       {data.professional_summary && (
         <section className="mb-5">
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2 text-[#a078ff]">Professional Summary</h2>
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: accentColor }}>Professional Summary</h2>
+          <div className="w-full h-px mb-3" style={{ background: '#e2e8f0' }} />
           <p className="text-slate-700 leading-relaxed">{data.professional_summary}</p>
         </section>
       )}
       {data.technical_skills?.length > 0 && (
         <section className="mb-4">
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2 text-[#a078ff]">Technical Skills</h2>
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: accentColor }}>Technical Skills</h2>
+          <div className="w-full h-px mb-3" style={{ background: '#e2e8f0' }} />
           <p className="text-slate-700 text-xs leading-relaxed">{data.technical_skills.join(' • ')}</p>
         </section>
       )}
       {data.professional_skills?.length > 0 && (
         <section className="mb-5">
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2 text-[#a078ff]">Professional Skills</h2>
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: accentColor }}>Professional Skills</h2>
+          <div className="w-full h-px mb-3" style={{ background: '#e2e8f0' }} />
           <p className="text-slate-700 text-xs leading-relaxed">{data.professional_skills.join(' • ')}</p>
         </section>
       )}
       {data.experience?.length > 0 && (
         <section className="mb-5">
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-3 text-[#a078ff]">Professional Experience</h2>
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: accentColor }}>Professional Experience</h2>
+          <div className="w-full h-px mb-3" style={{ background: '#e2e8f0' }} />
           {data.experience.map((exp, i) => (
-            <div key={i} className="mb-4 pl-5 border-l-2 border-[#4edea3]/30">
+            <div key={i} className="mb-4 pl-4" style={{ borderLeft: `2px solid ${accentColor}33` }}>
               <div className="flex items-baseline justify-between mb-0.5">
                 <p className="font-bold text-slate-900">{exp.title} · {exp.company}</p>
                 <p className="text-xs text-slate-400 font-mono ml-4 flex-shrink-0">{exp.duration}</p>
@@ -227,7 +243,7 @@ const ResumePreview: React.FC<{ data: OptimizedResume }> = ({ data }) => {
               <ul className="mt-1 space-y-0.5">
                 {exp.bullets?.map((bullet, j) => (
                   <li key={j} className="text-slate-600 text-xs flex gap-2">
-                    <span className="text-[#4edea3] flex-shrink-0">•</span>{bullet}
+                    <span className="flex-shrink-0" style={{ color: accentColor }}>•</span>{bullet}
                   </li>
                 ))}
               </ul>
@@ -237,7 +253,8 @@ const ResumePreview: React.FC<{ data: OptimizedResume }> = ({ data }) => {
       )}
       {data.education?.length > 0 && (
         <section className="mb-5">
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2 text-[#a078ff]">Education</h2>
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: accentColor }}>Education</h2>
+          <div className="w-full h-px mb-3" style={{ background: '#e2e8f0' }} />
           {data.education.map((edu, i) => (
             <div key={i} className="mb-2">
               <div className="flex items-baseline justify-between">
@@ -251,7 +268,8 @@ const ResumePreview: React.FC<{ data: OptimizedResume }> = ({ data }) => {
       )}
       {data.projects?.length > 0 && (
         <section className="mb-5">
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2 text-[#a078ff]">Projects</h2>
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: accentColor }}>Projects</h2>
+          <div className="w-full h-px mb-3" style={{ background: '#e2e8f0' }} />
           {data.projects.map((proj, i) => (
             <div key={i} className="mb-3">
               <p className="font-semibold text-slate-900 text-sm">{proj.name}</p>
@@ -259,7 +277,7 @@ const ResumePreview: React.FC<{ data: OptimizedResume }> = ({ data }) => {
               <ul className="mt-1 space-y-0.5">
                 {proj.bullets?.map((bullet, j) => (
                   <li key={j} className="text-slate-600 text-xs flex gap-2">
-                    <span className="text-[#a078ff] flex-shrink-0">•</span>{bullet}
+                    <span className="flex-shrink-0" style={{ color: accentColor }}>•</span>{bullet}
                   </li>
                 ))}
               </ul>
@@ -269,11 +287,12 @@ const ResumePreview: React.FC<{ data: OptimizedResume }> = ({ data }) => {
       )}
       {data.certifications?.length > 0 && (
         <section>
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2 text-[#a078ff]">Certifications</h2>
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: accentColor }}>Certifications</h2>
+          <div className="w-full h-px mb-3" style={{ background: '#e2e8f0' }} />
           <ul className="space-y-0.5">
             {data.certifications.map((cert, i) => (
               <li key={i} className="text-slate-600 text-xs flex gap-2">
-                <span className="text-[#a078ff] flex-shrink-0">•</span>{cert}
+                <span className="flex-shrink-0" style={{ color: accentColor }}>•</span>{cert}
               </li>
             ))}
           </ul>
@@ -408,12 +427,16 @@ const ResumePage: React.FC = () => {
     (location.state as any)?.resumeId ?? null
   );
   const [jobDescription, setJobDescription] = useState('');
+  const [jobTitleOverride, setJobTitleOverride] = useState('');
+  const [company, setCompany] = useState('');
   const [tone, setTone] = useState('Professional');
   const [activeTab, setActiveTab] = useState<'preview' | 'suggestions' | 'comparison'>('preview');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [optimizationResult, setOptimizationResult] = useState<OptimizationResult | null>(null);
   const [loadingStep, setLoadingStep] = useState(0);
   const [improvingSection, setImprovingSection] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('classic-professional');
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -458,10 +481,20 @@ const ResumePage: React.FC = () => {
   });
 
   const optimizeMutation = useMutation({
-    mutationFn: ({ resumeId, jobDescription }: { resumeId: number; jobDescription: string }) =>
+    mutationFn: ({ resumeId, jobDescription, templateId, jobTitle, companyName, tone }: {
+      resumeId: number; jobDescription: string; templateId: string;
+      jobTitle?: string; companyName?: string; tone?: string;
+    }) =>
       apiClient
         .post(`/resumes/${resumeId}/optimize`, null, {
-          params: { job_description: jobDescription },
+          params: {
+            job_description: jobDescription,
+            template_id: templateId,
+            ...(jobTitle ? { job_title: jobTitle } : {}),
+            ...(companyName ? { company: companyName } : {}),
+            ...(tone ? { tone: tone.toLowerCase() } : {}),
+          },
+          timeout: 120_000,
         })
         .then((r) => r.data),
     onSuccess: (response: { status: string; data: OptimizationResult }) => {
@@ -545,15 +578,31 @@ const ResumePage: React.FC = () => {
   const handleOptimize = () => {
     if (!selectedResumeId) { showToast('Select a resume first.', 'error'); return; }
     if (!jobDescription.trim()) { showToast('Paste a job description first.', 'error'); return; }
-    optimizeMutation.mutate({ resumeId: selectedResumeId, jobDescription: jobDescription.trim() });
+    optimizeMutation.mutate({
+      resumeId: selectedResumeId,
+      jobDescription: jobDescription.trim(),
+      templateId: selectedTemplateId,
+      jobTitle: jobTitleOverride.trim() || undefined,
+      companyName: company.trim() || undefined,
+      tone,
+    });
   };
 
   const handleDownload = async (type: 'pdf' | 'docx') => {
     if (!selectedResumeId) return;
     const name = optimizationResult?.optimized?.full_name?.trim().replace(/\s+/g, '_') || 'resume';
+    const jt = jobTitleOverride.trim() || '';
+    const suggestedFilename = jt
+      ? `${name}_${jt.replace(/\s+/g, '_')}.${type}`
+      : `${name}_Tailored_Resume.${type}`;
     try {
-      await downloadBlob(`/resumes/${selectedResumeId}/download/${type}`, `${name}_Optimized.${type}`);
-      showToast(`Downloaded ${name}_Optimized.${type}`);
+      const params: Record<string, string> = { template_id: selectedTemplateId };
+      if (jt) params.job_title = jt;
+      await downloadBlob(
+        `/resumes/${selectedResumeId}/download/${type}?` + new URLSearchParams(params).toString(),
+        suggestedFilename,
+      );
+      showToast(`Downloaded ${suggestedFilename}`);
     } catch (err: any) {
       let detail = err?.message || 'Unknown error';
       if (err?.response?.data instanceof Blob) {
@@ -623,7 +672,7 @@ const ResumePage: React.FC = () => {
         </div>
 
         {/* ── Split Screen ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-5">
 
           {/* LEFT — Source Document */}
           <div className="rounded-2xl p-6 space-y-4" style={{ background: 'rgba(13,28,45,1)', border: '1px solid rgba(73,68,84,0.2)' }}>
@@ -708,7 +757,7 @@ const ResumePage: React.FC = () => {
           </div>
 
           {/* RIGHT — Target Role */}
-          <div className="rounded-2xl p-6 space-y-4" style={{ background: 'rgba(13,28,45,1)', border: '1px solid rgba(73,68,84,0.2)' }}>
+          <div className="rounded-2xl p-6 space-y-5" style={{ background: 'rgba(13,28,45,1)', border: '1px solid rgba(73,68,84,0.2)' }}>
             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mono-label">Target Role</h3>
 
             <div>
@@ -718,12 +767,45 @@ const ResumePage: React.FC = () => {
               <textarea
                 value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
-                rows={10}
+                rows={7}
                 placeholder="Paste the full job description here…&#10;&#10;Include the title, responsibilities, and requirements for best results."
                 className="w-full rounded-xl p-4 text-sm text-[#d4e4fa] placeholder:text-slate-600 bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-[#d0bcff]/40 transition-all"
                 style={{ background: 'rgba(39,54,71,0.3)', border: '1px solid rgba(73,68,84,0.3)' }}
               />
             </div>
+
+            {/* Job title + Company */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs mono-label text-slate-500 uppercase tracking-widest mb-2">
+                  Job Title <span className="text-[#ffb4ab]">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={jobTitleOverride}
+                  onChange={(e) => setJobTitleOverride(e.target.value)}
+                  placeholder="e.g. Senior Backend Engineer"
+                  className="w-full rounded-xl px-4 py-2.5 text-sm text-[#d4e4fa] placeholder:text-slate-600 bg-transparent focus:outline-none focus:ring-1 focus:ring-[#d0bcff]/40 transition-all"
+                  style={{ background: 'rgba(39,54,71,0.3)', border: '1px solid rgba(73,68,84,0.3)' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs mono-label text-slate-500 uppercase tracking-widest mb-2">
+                  Company <span className="text-slate-600">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  placeholder="e.g. Acme Corp"
+                  className="w-full rounded-xl px-4 py-2.5 text-sm text-[#d4e4fa] placeholder:text-slate-600 bg-transparent focus:outline-none focus:ring-1 focus:ring-[#d0bcff]/40 transition-all"
+                  style={{ background: 'rgba(39,54,71,0.3)', border: '1px solid rgba(73,68,84,0.3)' }}
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-600 -mt-3 mono-label">
+              Export file: {optimizationResult?.optimized?.full_name?.replace(/\s+/g, '_') || 'Name'}_{jobTitleOverride.trim().replace(/\s+/g, '_') || 'Tailored_Resume'}.pdf/docx
+            </p>
 
             <div>
               <label className="block text-xs mono-label text-slate-500 uppercase tracking-widest mb-2">
@@ -740,6 +822,77 @@ const ResumePage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* ── Template Selector ─────────────────────────────────────────── */}
+        <div
+          className="rounded-2xl p-6 mb-6"
+          style={{ background: 'rgba(13,28,45,1)', border: '1px solid rgba(73,68,84,0.2)' }}
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <LayoutTemplate className="w-4 h-4 text-[#d0bcff]" />
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mono-label">
+              Resume Template
+            </h3>
+          </div>
+          <TemplateSelector
+            selectedId={selectedTemplateId}
+            onSelect={setSelectedTemplateId}
+            onUpgradeCta={() => setShowUpgradeModal(true)}
+          />
+        </div>
+
+        {/* ── Upgrade Modal ─────────────────────────────────────────────── */}
+        {showUpgradeModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <div
+              className="w-full max-w-md rounded-2xl p-8 text-center space-y-5 relative"
+              style={{
+                background: 'rgba(13,28,45,0.98)',
+                border: '1px solid rgba(208,188,255,0.2)',
+                boxShadow: '0 24px 80px rgba(0,0,0,0.5)',
+              }}
+            >
+              <button
+                onClick={() => setShowUpgradeModal(false)}
+                className="absolute top-4 right-4 w-7 h-7 flex items-center justify-center rounded-full text-slate-500 hover:text-white hover:bg-[#273647]/60 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto"
+                style={{
+                  background: 'linear-gradient(135deg, #d0bcff 0%, #4edea3 100%)',
+                  boxShadow: '0 8px 24px rgba(208,188,255,0.3)',
+                }}
+              >
+                <Zap className="w-7 h-7 text-[#340080]" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-[#d4e4fa] mb-1.5">Unlock More Templates</h3>
+                <p className="text-sm text-[#9cb3cc]">
+                  Upgrade your plan to access additional ATS-optimized templates.
+                  Job Seeker unlocks 2 templates; Interview Cracker unlocks all 10.
+                </p>
+              </div>
+              <a
+                href="/subscription"
+                className="block w-full py-3 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity text-center"
+                style={{
+                  background: 'linear-gradient(135deg, #d0bcff 0%, #4edea3 100%)',
+                  color: '#340080',
+                }}
+              >
+                View Plans →
+              </a>
+              <button
+                onClick={() => setShowUpgradeModal(false)}
+                className="block mx-auto text-xs text-slate-600 hover:text-slate-400 transition-colors"
+              >
+                Maybe later
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Optimize Button ───────────────────────────────────────────── */}
         <button
@@ -810,6 +963,13 @@ const ResumePage: React.FC = () => {
 
               {/* Download / copy */}
               <div className="flex flex-col gap-2 flex-shrink-0">
+                {/* Active template badge */}
+                <div className="flex items-center gap-1.5 mb-1">
+                  <LayoutTemplate className="w-3 h-3 text-slate-500" />
+                  <span className="text-[10px] text-slate-500 mono-label uppercase tracking-wider truncate max-w-[110px]">
+                    {selectedTemplateId.replace('_', ' ')}
+                  </span>
+                </div>
                 <button onClick={() => handleDownload('pdf')}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity"
                   style={{ background: 'linear-gradient(135deg, #d0bcff 0%, #4edea3 100%)', color: '#340080' }}>
@@ -851,7 +1011,12 @@ const ResumePage: React.FC = () => {
 
             {/* Tab content */}
             <div className="rounded-2xl p-6" style={{ background: 'rgba(13,28,45,1)', border: '1px solid rgba(73,68,84,0.2)' }}>
-              {activeTab === 'preview' && <ResumePreview data={optimizationResult.optimized} />}
+              {activeTab === 'preview' && (
+                <ResumePreview
+                  data={optimizationResult.optimized}
+                  accentColor={getTemplateAccent(selectedTemplateId)}
+                />
+              )}
               {activeTab === 'suggestions' && (
                 <SuggestionsPanel
                   analysis={optimizationResult.analysis}

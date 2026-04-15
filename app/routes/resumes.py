@@ -8,18 +8,23 @@ from sqlalchemy.orm import Session
 import logging
 
 from app.core.database import get_db
+from app.core.plans import can_use_template, plan_from_string, required_plan_for_template
 from app.schemas.resume import ResumeResponse
 from app.services.resume_service import ResumeService
 from app.services.auth_service import get_current_user
 from app.services.ai_service import AIService
+from app.services import template_service
 from app.models.user import User
+from app.models.profile import UserSkill, UserExperience, UserProject, UserEducation, UserCertification
 from app.core.config import settings
+from app.utils.filename import build_resume_filename
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 ai_service = AIService(api_key=settings.anthropic_api_key)
 
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+DEFAULT_TEMPLATE = "template_1"
 
 
 # ─── Text extraction ─────────────────────────────────────────────────────────
@@ -63,230 +68,52 @@ def _extract_text(filename: str, content_bytes: bytes) -> str:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot decode file content.")
 
 
-# ─── File generators ──────────────────────────────────────────────────────────
-
-def _build_docx(data: Dict[str, Any]) -> bytes:
-    from docx import Document
-    from docx.shared import Pt, Inches, RGBColor
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.oxml.ns import qn
-    from docx.oxml import OxmlElement
-
-    doc = Document()
-    sec = doc.sections[0]
-    sec.top_margin = Inches(0.75)
-    sec.bottom_margin = Inches(0.75)
-    sec.left_margin = Inches(1.0)
-    sec.right_margin = Inches(1.0)
-
-    # Remove default paragraph spacing
-    doc.styles["Normal"].paragraph_format.space_after = Pt(0)
-
-    def _add_hr(paragraph):
-        """Add a bottom border to a paragraph."""
-        pPr = paragraph._element.get_or_add_pPr()
-        pBdr = OxmlElement("w:pBdr")
-        bottom = OxmlElement("w:bottom")
-        bottom.set(qn("w:val"), "single")
-        bottom.set(qn("w:sz"), "6")
-        bottom.set(qn("w:space"), "1")
-        bottom.set(qn("w:color"), "1a56db")
-        pBdr.append(bottom)
-        pPr.append(pBdr)
-
-    def add_heading(title: str):
-        p = doc.add_paragraph()
-        p.paragraph_format.space_before = Pt(10)
-        run = p.add_run(title.upper())
-        run.bold = True
-        run.font.size = Pt(11)
-        run.font.color.rgb = RGBColor(0x1A, 0x56, 0xDB)
-        _add_hr(p)
-        return p
-
-    # Name
-    p_name = doc.add_paragraph()
-    p_name.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p_name.add_run(data.get("full_name", ""))
-    r.bold = True
-    r.font.size = Pt(22)
-
-    # Contact
-    p_contact = doc.add_paragraph()
-    p_contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_contact.add_run(data.get("contact", "")).font.size = Pt(10)
-
-    # Summary
-    if data.get("summary"):
-        add_heading("Professional Summary")
-        p = doc.add_paragraph(data["summary"])
-        p.runs[0].font.size = Pt(10)
-
-    # Skills
-    if data.get("skills"):
-        add_heading("Skills")
-        p = doc.add_paragraph(" • ".join(data["skills"]))
-        p.runs[0].font.size = Pt(10)
-
-    # Experience
-    if data.get("experience"):
-        add_heading("Experience")
-        for exp in data["experience"]:
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(6)
-            r = p.add_run(f"{exp.get('title', '')}  —  {exp.get('company', '')}")
-            r.bold = True
-            r.font.size = Pt(10)
-            p2 = doc.add_paragraph()
-            r2 = p2.add_run(exp.get("duration", ""))
-            r2.italic = True
-            r2.font.size = Pt(9)
-            for ach in exp.get("achievements", []):
-                bp = doc.add_paragraph(style="List Bullet")
-                bp.add_run(ach).font.size = Pt(10)
-
-    # Education
-    if data.get("education"):
-        add_heading("Education")
-        for edu in data["education"]:
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(4)
-            r = p.add_run(edu.get("degree", ""))
-            r.bold = True
-            r.font.size = Pt(10)
-            doc.add_paragraph(f"{edu.get('institution', '')} | {edu.get('year', '')}").runs[0].font.size = Pt(10)
-
-    # Projects
-    if data.get("projects"):
-        add_heading("Projects")
-        for proj in data["projects"]:
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(4)
-            r = p.add_run(proj.get("name", ""))
-            r.bold = True
-            r.font.size = Pt(10)
-            doc.add_paragraph(proj.get("description", "")).runs[0].font.size = Pt(10)
-            techs = proj.get("technologies", [])
-            if techs:
-                p3 = doc.add_paragraph(f"Technologies: {', '.join(techs)}")
-                p3.runs[0].italic = True
-                p3.runs[0].font.size = Pt(9)
-
-    # Certifications
-    if data.get("certifications"):
-        add_heading("Certifications")
-        for cert in data["certifications"]:
-            bp = doc.add_paragraph(style="List Bullet")
-            bp.add_run(cert).font.size = Pt(10)
-
-    buf = io.BytesIO()
-    doc.save(buf)
-    return buf.getvalue()
-
-
-def _build_pdf(data: Dict[str, Any]) -> bytes:
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
-    from reportlab.lib.units import inch
-    from reportlab.lib import colors
-
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf,
-        pagesize=letter,
-        rightMargin=inch,
-        leftMargin=inch,
-        topMargin=0.75 * inch,
-        bottomMargin=0.75 * inch,
-    )
-
-    BLUE = colors.HexColor("#1a56db")
-    GRAY = colors.HexColor("#64748b")
-    LIGHT = colors.HexColor("#e2e8f0")
-
-    name_style = ParagraphStyle("Name", fontSize=22, fontName="Helvetica-Bold", alignment=1, spaceAfter=4)
-    contact_style = ParagraphStyle("Contact", fontSize=10, alignment=1, textColor=GRAY, spaceAfter=10)
-    section_style = ParagraphStyle("Section", fontSize=11, fontName="Helvetica-Bold", textColor=BLUE, spaceBefore=10, spaceAfter=3)
-    body_style = ParagraphStyle("Body", fontSize=10, leading=14, spaceAfter=4)
-    bullet_style = ParagraphStyle("Bullet", fontSize=10, leading=14, leftIndent=16, spaceAfter=2)
-    job_title_style = ParagraphStyle("JobTitle", fontSize=10, fontName="Helvetica-Bold", spaceAfter=1)
-    italic_style = ParagraphStyle("Italic", fontSize=9, fontName="Helvetica-Oblique", textColor=GRAY, spaceAfter=3)
-
-    story = []
-    story.append(Paragraph(data.get("full_name", ""), name_style))
-    story.append(Paragraph(data.get("contact", ""), contact_style))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=BLUE, spaceAfter=4))
-
-    def section(title: str):
-        story.append(Paragraph(title.upper(), section_style))
-        story.append(HRFlowable(width="100%", thickness=0.5, color=LIGHT, spaceAfter=4))
-
-    if data.get("summary"):
-        section("Professional Summary")
-        story.append(Paragraph(data["summary"], body_style))
-
-    if data.get("skills"):
-        section("Skills")
-        story.append(Paragraph(" &bull; ".join(data["skills"]), body_style))
-
-    if data.get("experience"):
-        section("Experience")
-        for exp in data["experience"]:
-            story.append(Paragraph(f"<b>{exp.get('title','')} — {exp.get('company','')}</b>", job_title_style))
-            story.append(Paragraph(f"<i>{exp.get('duration','')}</i>", italic_style))
-            for ach in exp.get("achievements", []):
-                story.append(Paragraph(f"&bull; {ach}", bullet_style))
-            story.append(Spacer(1, 4))
-
-    if data.get("education"):
-        section("Education")
-        for edu in data["education"]:
-            story.append(Paragraph(f"<b>{edu.get('degree','')}</b>", job_title_style))
-            story.append(Paragraph(f"{edu.get('institution','')} | {edu.get('year','')}", body_style))
-
-    if data.get("projects"):
-        section("Projects")
-        for proj in data["projects"]:
-            story.append(Paragraph(f"<b>{proj.get('name','')}</b>", job_title_style))
-            story.append(Paragraph(proj.get("description", ""), body_style))
-            techs = proj.get("technologies", [])
-            if techs:
-                story.append(Paragraph(f"<i>Technologies: {', '.join(techs)}</i>", italic_style))
-
-    if data.get("certifications"):
-        section("Certifications")
-        for cert in data["certifications"]:
-            story.append(Paragraph(f"&bull; {cert}", bullet_style))
-
-    doc.build(story)
-    return buf.getvalue()
-
-
-# ─── Data normalizer (handles old flat format and new {analysis, optimized} format) ──
+# ─── Data normalizer ──────────────────────────────────────────────────────────
 
 def _normalize_data(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert either old or new optimized-content JSON into a canonical dict for the builders."""
-    data: Dict[str, Any] = raw.get("optimized", raw) if ("optimized" in raw and "analysis" in raw) else raw
+    """Convert either old flat format or new {analysis, optimized} format into canonical dict."""
+    data: Dict[str, Any] = (
+        raw.get("optimized", raw)
+        if ("optimized" in raw and "analysis" in raw)
+        else raw
+    )
 
     contact = data.get("contact", "")
     if isinstance(contact, dict):
-        parts = [v for v in [contact.get("email"), contact.get("phone"), contact.get("location")] if v]
+        parts = []
+        for key in ("email", "phone", "location"):
+            if contact.get(key):
+                parts.append(contact[key])
+        linkedin = contact.get("linkedin", "")
+        portfolio = contact.get("portfolio", "")
+        if linkedin:
+            parts.append(f"LinkedIn: {linkedin}")
+        if portfolio:
+            parts.append(f"GitHub: {portfolio}")
         contact_str = " | ".join(parts)
     else:
         contact_str = str(contact)
 
-    tech = data.get("technical_skills") or data.get("skills") or []
-    prof = data.get("professional_skills") or []
-    skills = tech + prof
+    tech_skills = data.get("technical_skills") or data.get("skills") or []
+    prof_skills = data.get("professional_skills") or []
+    skills = tech_skills + prof_skills
 
     experience = []
     for exp in (data.get("experience") or []):
+        sub_projects = exp.get("projects") or []
+        if sub_projects:
+            all_bullets = []
+            for proj in sub_projects:
+                all_bullets.extend(proj.get("bullets") or [])
+            achievements = all_bullets
+        else:
+            achievements = exp.get("bullets") or exp.get("achievements") or []
         experience.append({
             "title": exp.get("title", ""),
             "company": exp.get("company", ""),
             "duration": exp.get("duration", ""),
-            "achievements": exp.get("bullets") or exp.get("achievements") or [],
+            "achievements": achievements,
+            "projects": sub_projects,
         })
 
     education = [
@@ -308,11 +135,109 @@ def _normalize_data(raw: Dict[str, Any]) -> Dict[str, Any]:
         "contact": contact_str,
         "summary": data.get("professional_summary") or data.get("summary", ""),
         "skills": skills,
+        "technical_skills": tech_skills,
+        "professional_skills": prof_skills,
         "experience": experience,
         "education": education,
         "projects": projects,
         "certifications": data.get("certifications") or [],
     }
+
+
+# ─── Profile context builder ─────────────────────────────────────────────────
+
+def build_profile_context(user: User, db: Session) -> dict:
+    """Build structured profile data dict for AI context."""
+    skills = db.query(UserSkill).filter(UserSkill.user_id == user.id).all()
+    experiences = (
+        db.query(UserExperience)
+        .filter(UserExperience.user_id == user.id)
+        .order_by(UserExperience.order_index)
+        .all()
+    )
+    projects = db.query(UserProject).filter(UserProject.user_id == user.id).all()
+    education = db.query(UserEducation).filter(UserEducation.user_id == user.id).all()
+    certifications = db.query(UserCertification).filter(UserCertification.user_id == user.id).all()
+
+    return {
+        "name": f"{user.first_name or ''} {user.last_name or ''}".strip(),
+        "email": user.email,
+        "phone": user.phone,
+        "location": user.location,
+        "linkedin": user.linkedin_url,
+        "github": user.github_url,
+        "portfolio": user.portfolio_url,
+        "headline": user.profile_headline,
+        "summary": user.professional_summary,
+        "skills": {
+            "languages":   [s.name for s in skills if s.category == "language"],
+            "frameworks":  [s.name for s in skills if s.category == "framework"],
+            "databases":   [s.name for s in skills if s.category == "database"],
+            "tools":       [s.name for s in skills if s.category == "tool"],
+            "cloud":       [s.name for s in skills if s.category == "cloud"],
+            "soft_skills": [s.name for s in skills if s.category == "soft_skill"],
+        },
+        "experiences": [
+            {
+                "title": exp.job_title,
+                "company": exp.company,
+                "location": exp.location,
+                "start_date": exp.start_date,
+                "end_date": exp.end_date or "Present",
+                "is_current": exp.is_current,
+                "description": exp.description,
+                "projects": [
+                    {
+                        "name": p.name,
+                        "description": p.description,
+                        "technologies": p.technologies,
+                        "bullets": p.bullets or [],
+                    }
+                    for p in projects if p.experience_id == exp.id
+                ],
+            }
+            for exp in experiences
+        ],
+        "education": [
+            {"degree": e.degree, "institution": e.institution, "year": e.year, "details": e.details}
+            for e in education
+        ],
+        "certifications": [
+            {"name": c.name, "issuer": c.issuer, "date": c.date}
+            for c in certifications
+        ],
+        "standalone_projects": [
+            {"name": p.name, "description": p.description, "technologies": p.technologies, "bullets": p.bullets or []}
+            for p in projects if p.experience_id is None
+        ],
+    }
+
+
+def _profile_has_content(profile_data: dict) -> bool:
+    """Return True if the profile has enough data to serve as the AI source of truth."""
+    has_experience = len(profile_data.get("experiences", [])) > 0
+    skills = profile_data.get("skills", {})
+    total_skills = sum(len(v) for v in skills.values())
+    return has_experience or total_skills >= 3
+
+
+# ─── Plan + template guard ────────────────────────────────────────────────────
+
+def _assert_template_access(user: User, template_id: str) -> None:
+    """Raise 403 if the user's plan does not allow this template.
+    Admin users bypass all plan restrictions."""
+    if getattr(user, "is_admin", False):
+        return
+    plan = plan_from_string(getattr(user, "plan_tier", "starter"))
+    if not can_use_template(plan, template_id):
+        required = required_plan_for_template(template_id) or "a higher plan"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Your current plan ({plan.value}) does not include template '{template_id}'. "
+                f"Upgrade to {required} to use this template."
+            ),
+        )
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
@@ -333,7 +258,10 @@ async def upload_resume(
 ):
     content_bytes = await file.read()
     if len(content_bytes) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File exceeds 5 MB limit")
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File exceeds 5 MB limit",
+        )
 
     text = _extract_text(file.filename or "resume.txt", content_bytes)
     if len(text) < 20:
@@ -351,6 +279,10 @@ async def upload_resume(
 def optimize_resume(
     resume_id: int,
     job_description: Optional[str] = Query(default=None),
+    job_title: Optional[str] = Query(default=None),
+    company: Optional[str] = Query(default=None),
+    tone: Optional[str] = Query(default=None),
+    template_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -358,39 +290,66 @@ def optimize_resume(
     if not resume:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found")
 
-    jd_text = job_description or ""
-    job_title = "Target Role"
-    company_name = ""
-    required_skills = ""
+    # Validate template access
+    tid = template_id or DEFAULT_TEMPLATE
+    _assert_template_access(current_user, tid)
 
+    jd_text = job_description or ""
     if not jd_text.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A job description is required. Select a job or paste a description.",
+            detail="A job description is required.",
         )
+
+    resolved_title = job_title or "Target Role"
+    resolved_company = company or ""
+
+    # Load profile — use as source of truth if it has content
+    profile_data = build_profile_context(current_user, db)
+    use_profile = _profile_has_content(profile_data)
 
     try:
-        # Stage 1 — Analysis
-        analysis = ai_service.analyze_resume_job_fit(
-            resume_text=resume.original_content,
-            job_title=job_title,
-            company_name=company_name,
-            job_description=jd_text,
-            required_skills=required_skills,
-        )
-        # Stage 2 — Optimized rewrite
-        optimized = ai_service.generate_optimized_resume(
-            resume_text=resume.original_content,
-            analysis=analysis,
-            job_title=job_title,
-            company_name=company_name,
-            job_description=jd_text,
-        )
+        if use_profile:
+            analysis = ai_service.analyze_resume_job_fit_v2(
+                profile_data=profile_data,
+                resume_text=resume.original_content,
+                job_title=resolved_title,
+                company_name=resolved_company,
+                job_description=jd_text,
+            )
+            optimized = ai_service.generate_optimized_resume_v2(
+                profile_data=profile_data,
+                resume_text=resume.original_content,
+                analysis=analysis,
+                job_title=resolved_title,
+                company_name=resolved_company,
+                job_description=jd_text,
+                tone=tone or (current_user.preferences or {}).get("resume_tone", "professional"),
+            )
+        else:
+            # Fallback: no profile data yet — use raw resume text only
+            analysis = ai_service.analyze_resume_job_fit(
+                resume_text=resume.original_content,
+                job_title=resolved_title,
+                company_name=resolved_company,
+                job_description=jd_text,
+                required_skills="",
+            )
+            optimized = ai_service.generate_optimized_resume(
+                resume_text=resume.original_content,
+                analysis=analysis,
+                job_title=resolved_title,
+                company_name=resolved_company,
+                job_description=jd_text,
+            )
     except Exception as e:
         logger.error(f"AI optimization error: {e}")
-        raise HTTPException(status_code=500, detail="AI optimization failed. Please check your API key and try again.")
+        raise HTTPException(
+            status_code=500,
+            detail="AI optimization failed. Please check your API key and try again.",
+        )
 
-    result = {"analysis": analysis, "optimized": optimized}
+    result = {"analysis": analysis, "optimized": optimized, "template_id": tid}
     ResumeService.update_optimized(db, resume, json.dumps(result, ensure_ascii=False))
 
     return {"status": "success", "data": result}
@@ -399,6 +358,8 @@ def optimize_resume(
 @router.get("/{resume_id}/download/docx")
 def download_docx(
     resume_id: int,
+    template_id: Optional[str] = Query(default=None),
+    job_title: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -411,16 +372,22 @@ def download_docx(
     except json.JSONDecodeError:
         raise HTTPException(status_code=422, detail="Optimized content is not valid JSON")
 
+    # Resolve template_id — prefer query param, then stored value, then default
+    tid = template_id or raw.get("template_id") or DEFAULT_TEMPLATE
+    _assert_template_access(current_user, tid)
+
     data = _normalize_data(raw)
 
     try:
-        docx_bytes = _build_docx(data)
+        docx_bytes = template_service.build_docx(tid, data)
     except Exception as e:
         logger.error(f"DOCX generation failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate DOCX file")
 
-    candidate = (data.get("full_name") or "").strip().replace(" ", "_")
-    filename = f"{candidate or resume.file_name.rsplit('.', 1)[0]}_Resume_Optimized.docx"
+    # Derive job title from stored data if not provided
+    resolved_title = job_title or raw.get("optimized", {}).get("job_title") or ""
+    user_name = data.get("full_name") or f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
+    filename = build_resume_filename(user_name or None, resolved_title or None, "docx")
 
     return StreamingResponse(
         io.BytesIO(docx_bytes),
@@ -435,6 +402,8 @@ def download_docx(
 @router.get("/{resume_id}/download/pdf")
 def download_pdf(
     resume_id: int,
+    template_id: Optional[str] = Query(default=None),
+    job_title: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -447,16 +416,20 @@ def download_pdf(
     except json.JSONDecodeError:
         raise HTTPException(status_code=422, detail="Optimized content is not valid JSON")
 
+    tid = template_id or raw.get("template_id") or DEFAULT_TEMPLATE
+    _assert_template_access(current_user, tid)
+
     data = _normalize_data(raw)
 
     try:
-        pdf_bytes = _build_pdf(data)
+        pdf_bytes = template_service.build_pdf(tid, data)
     except Exception as e:
         logger.error(f"PDF generation failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate PDF file")
 
-    candidate = (data.get("full_name") or "").strip().replace(" ", "_")
-    filename = f"{candidate or resume.file_name.rsplit('.', 1)[0]}_Resume_Optimized.pdf"
+    resolved_title = job_title or raw.get("optimized", {}).get("job_title") or ""
+    user_name = data.get("full_name") or f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
+    filename = build_resume_filename(user_name or None, resolved_title or None, "pdf")
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

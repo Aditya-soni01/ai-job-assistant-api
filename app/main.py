@@ -6,10 +6,12 @@ import logging
 
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.routes import auth, ai, resumes
+from app.routes import auth, ai, resumes, templates
 from app.routes import oauth
+from app.routes.profile import router as profile_router
 from app.models import resume as _resume_model  # noqa: F401 — ensures table is created
 from app.models import password_reset as _password_reset_model  # noqa: F401 — ensures table is created
+from app.models import profile as _profile_model  # noqa: F401 — ensures profile tables are created
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,8 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(oauth.router, prefix="/api/auth/oauth", tags=["OAuth"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI Services"])
 app.include_router(resumes.router, prefix="/api/resumes", tags=["Resumes"])
+app.include_router(templates.router, prefix="/api/templates", tags=["Templates"])
+app.include_router(profile_router, prefix="/api/profile", tags=["Profile"])
 
 
 @app.get("/", tags=["Health"])

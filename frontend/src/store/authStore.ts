@@ -39,6 +39,7 @@ export interface User {
   first_name: string;
   last_name: string;
   is_active: boolean;
+  plan_tier: 'starter' | 'job_seeker' | 'interview_cracker';
   created_at: string;
   updated_at: string;
 }

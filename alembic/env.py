@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.database import Base
 from app.models.user import User
 from app.models.job import Job
+from app.models.profile import UserSkill, UserExperience, UserProject, UserEducation, UserCertification  # noqa: F401
 
 config = context.config
 

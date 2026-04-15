@@ -1,5 +1,3 @@
-alembic/versions/003_add_ai_request_log.py
-
 """Add ai_request_log table for tracking AI API requests.
 
 Revision ID: 003

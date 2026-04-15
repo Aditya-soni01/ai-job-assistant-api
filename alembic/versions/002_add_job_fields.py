@@ -1,5 +1,3 @@
-alembic/versions/002_add_job_fields.py
-
 """Add job fields: category, skills, salary, experience_level.
 
 Revision ID: 002
@@ -13,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "002"
-down_revision = "001"
+down_revision = None
 branch_labels = None
 depends_on = None
 
