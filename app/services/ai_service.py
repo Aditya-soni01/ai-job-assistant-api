@@ -2,6 +2,7 @@ from typing import Optional, List, Dict, Any
 from anthropic import Anthropic
 import logging
 import json
+import re
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -565,6 +566,8 @@ JOB DESCRIPTION:
 {job_description}
 REQUIRED SKILLS: {required_skills}
 
+IMPORTANT: Extract ONLY information that is explicitly present in the resume text above. Do NOT infer, suggest, or add certifications, skills, or projects that are not explicitly stated. Only list certifications that are clearly present as existing qualifications. Only extract projects that actually appear in the resume.
+
 Analyze and return ONLY a JSON object with these exact keys:
 {{
   "candidate_name": "extracted full name",
@@ -641,76 +644,137 @@ Analyze and return ONLY a JSON object with these exact keys:
         """
         stage_1_json = json.dumps(analysis, indent=2)
 
-        prompt = f"""You are an expert resume writer who creates ATS-optimized, achievement-focused resumes. Using the analysis below, rewrite the resume to be perfectly tailored for the target role.
+        prompt = f"""You are a senior technical recruiter and professional resume writer. \
+Rewrite this resume as a Hybrid Resume — one that passes ATS screening AND reads naturally to a human recruiter.
 
-ANALYSIS FROM STAGE 1:
+STAGE 1 ANALYSIS:
 {stage_1_json}
 
 ORIGINAL RESUME:
 {resume_text}
 
 TARGET JOB: {job_title} at {company_name}
-JOB DESCRIPTION: {job_description}
+JOB DESCRIPTION:
+{job_description}
 
-REWRITING RULES:
-1. Professional Summary: Write 3-4 sentences highlighting the most relevant experience and skills for THIS specific role. Front-load with the job title and years of experience. Include 3-5 keywords from the job description naturally.
+━━━ CRITICAL ANTI-HALLUCINATION RULES — NEVER VIOLATE ━━━
 
-2. Skills Section: Organize into "Technical Skills" and "Professional Skills". Lead with skills that match the job description. Include transferable skills mapped to JD terminology. Use the EXACT skill names from the job description where the candidate has equivalent skills (e.g., if JD says "CI/CD" and resume says "Azure DevOps pipelines", use BOTH).
+1. NEVER invent, fabricate, or hallucinate ANY information not present in the original resume:
+   - Do NOT create projects that don't exist in the original
+   - Do NOT add certifications the candidate doesn't have
+   - Do NOT claim skills not mentioned or clearly implied by the original
+   - Do NOT fabricate metrics, percentages, or achievements
+2. You may REPHRASE, REORDER, and REFRAME existing content — you may NOT ADD fictional content.
+3. If the original resume mentions a skill or experience even briefly, you may expand on it. You cannot create something from nothing.
+4. For certifications: ONLY include certifications explicitly listed in the original resume. Do NOT add "recommended" or "in progress" certifications.
+5. For projects: ONLY include projects mentioned in the original resume. Rewrite descriptions to match the JD but don't invent new ones.
 
-3. Experience Section: Rewrite each bullet point using the STAR method (Situation, Task, Action, Result). Lead each bullet with a strong action verb. Quantify achievements wherever possible (%, $, time saved, team size). Reorder bullet points within each role to put the most JD-relevant achievements first. Reorder the experience entries based on relevance to the target role.
+━━━ HYBRID RESUME RULES ━━━
 
-4. Education & Certifications: Highlight relevant coursework, projects, or thesis topics.
+PHILOSOPHY — balance both audiences:
+• ATS parser: needs keywords, standard section headings, parseable structure
+• Human recruiter: needs clear impact, readable sentences, no keyword stuffing
 
-5. ATS Optimization: Use standard section headings. Mirror the job description's exact terminology. Include both spelled-out and abbreviated forms of technical terms.
+SECTION RULES:
 
-Return ONLY a JSON object — no extra text, no markdown fences:
+1. PROFESSIONAL SUMMARY (3-4 sentences, 60-80 words MAX)
+   - Sentence 1: Years of experience + core role + 1-2 signature technologies
+   - Sentence 2: Specific value you bring to THIS role (tie to a JD requirement)
+   - Sentence 3 (optional): One standout achievement or differentiator
+   - DO NOT list skills. DO NOT use first person ("I"). Write in present tense.
+   - DO NOT try to mention every skill from the JD. Focus on the 4-5 most important ones.
+   - Sound like a confident human wrote it, not a keyword-matching algorithm.
+   - BAD: "Results-driven developer with expertise in multiple technologies across various domains..."
+   - GOOD: "Backend developer with 3+ years building ASP.NET Core APIs for enterprise clients."
+
+2. SKILLS (split into Technical and Professional — max 20 total)
+   - Include only skills the candidate actually has — no padding
+   - Mirror JD terminology where the candidate's skill is equivalent
+   - Technical Skills: tools, languages, frameworks, platforms
+   - Professional Skills: soft skills, methodologies, practices
+   - Max 20 total skills combined; pick the most JD-relevant ones
+   - NEVER add "(in progress)", "(learning)", "(basic)", or any qualifying labels to skills
+   - If a skill is listed as "in progress" in the original: include it without the qualifier if they have demonstrable experience, or omit it entirely if it would weaken the section
+   - NEVER mark skills with proficiency levels or completion status
+
+3. EXPERIENCE (preserve sub-project structure and specific technical details)
+   - PRESERVE project names and sub-headings from the original resume. If the original groups bullets under project names (e.g., "Data Centre Management Application", "E-Commerce & Auction Platform"), keep that structure using the "projects" array in the JSON schema below — one entry per sub-project with its own name and bullets.
+   - PRESERVE specific technical details: library names, API names, parameter counts, compliance standards (HIPAA, GDPR), architectural patterns (UDTT, CQRS, etc.)
+   - Rewrite bullets using STAR method BUT keep the original technical specificity:
+     BETTER: "Reduced response times by 50% by consolidating calls into a single stored procedure using UDTT"
+     WORSE: "Optimized API response times by 50% through efficient backend design"
+   - The goal is to REFRAME existing details to match JD language — not REPLACE details with vague rewrites.
+   - Format per bullet: [Strong verb] + [what you did] + [technology/context] + [outcome/scale]
+   - Keep each bullet to 1-2 lines; one idea per bullet
+   - Lead with the strongest, most JD-relevant bullet for each role or project
+   - Include real metrics where the original resume has them — do NOT invent numbers
+   - DO NOT use robotic STAR templates — write like a senior engineer would describe their work
+
+4. PROJECTS section (top-level projects — 1-2 bullets per project)
+   - State what was built, the key tech, and why it matters or what it achieved
+   - Keep it factual; do not embellish
+   - ONLY include projects from the original resume
+
+5. ATS REQUIREMENTS
+   - Use exact section heading names: Professional Summary, Skills, Experience, Education, Certifications, Projects
+   - Include both full forms and abbreviations where natural (e.g., "Entity Framework Core (EF Core)")
+   - Do NOT use tables, columns, or special characters in bullet text
+
+6. TERMINOLOGY MAPPING
+   - When the candidate has a skill equivalent to a JD requirement, use the JD's EXACT terminology in skills and bullets.
+   - Examples: If JD says "Angular 12+" and candidate worked with Angular, list "Angular 12+". If JD says "Jasmine/Jest" and candidate has testing experience, include "Jasmine/Jest".
+   - Include BOTH the JD's exact term AND the candidate's original term when different but related (e.g., "CI/CD Pipelines (Azure DevOps)").
+
+Return ONLY a valid JSON object — no markdown, no extra text:
 {{
-  "full_name": "",
+  "full_name": "exact name from resume",
   "contact": {{
-    "email": "",
-    "phone": "",
-    "location": "",
-    "linkedin": "",
-    "portfolio": ""
+    "email": "from resume",
+    "phone": "from resume",
+    "location": "City, Country or City, State",
+    "linkedin": "url or empty string",
+    "portfolio": "url or empty string"
   }},
-  "professional_summary": "The rewritten 3-4 sentence summary",
+  "professional_summary": "3-4 sentence hybrid summary (60-80 words)",
   "technical_skills": ["skill1", "skill2"],
   "professional_skills": ["skill1", "skill2"],
   "experience": [
     {{
-      "title": "optimized job title",
-      "company": "",
-      "location": "",
+      "title": "Job Title from resume (keep accurate)",
+      "company": "Company Name",
+      "location": "City or Remote",
       "duration": "Mon YYYY - Mon YYYY",
-      "bullets": [
-        "STAR-method achievement bullet 1",
-        "STAR-method achievement bullet 2",
-        "STAR-method achievement bullet 3"
+      "projects": [
+        {{
+          "name": "Sub-project name if original has one, or empty string for general bullets",
+          "bullets": [
+            "Strong verb + what + tech/context + outcome"
+          ]
+        }}
       ]
     }}
   ],
   "education": [
     {{
-      "degree": "",
-      "institution": "",
-      "year": "",
-      "details": "relevant coursework, GPA, honors if applicable"
+      "degree": "Degree Name",
+      "institution": "Institution Name",
+      "year": "Graduation Year",
+      "details": "relevant coursework or honors if present, else empty string"
     }}
   ],
-  "certifications": ["cert1", "cert2"],
+  "certifications": ["only certs explicitly listed in original resume"],
   "projects": [
     {{
-      "name": "",
-      "technologies": "tech1, tech2",
-      "bullets": ["what it does, achievement"]
+      "name": "Project Name",
+      "technologies": "Tech1, Tech2, Tech3",
+      "bullets": ["What was built and why it matters"]
     }}
   ],
-  "ats_score_after": 87,
+  "ats_score_after": 85,
   "keywords_added": ["keyword1", "keyword2"],
   "key_improvements": [
-    "Specific improvement 1",
-    "Specific improvement 2",
-    "Specific improvement 3"
+    "One concrete improvement made",
+    "Second concrete improvement made"
   ]
 }}"""
 
@@ -736,6 +800,221 @@ Return ONLY a JSON object — no extra text, no markdown fences:
 
         except Exception as e:
             logger.error(f"Stage 2 generation error: {e}")
+            raise
+
+    # ── Profile-aware v2 pipeline ─────────────────────────────────────────────
+
+    def analyze_resume_job_fit_v2(
+        self,
+        profile_data: dict,
+        resume_text: str,
+        job_title: str,
+        company_name: str,
+        job_description: str,
+    ) -> dict:
+        """
+        Stage 1 v2 — profile-aware fit analysis.
+        Uses structured profile as primary source; resume text for style reference.
+        """
+        profile_json = json.dumps(profile_data, indent=2)
+
+        prompt = f"""You are an expert ATS analyst. Analyze this candidate's profile against the job description.
+
+STRUCTURED PROFILE (source of truth):
+{profile_json}
+
+RAW RESUME TEXT (style reference only):
+{resume_text}
+
+TARGET JOB: {job_title} at {company_name}
+JOB DESCRIPTION:
+{job_description}
+
+Analyze and return ONLY a JSON object:
+{{
+  "candidate_name": "{profile_data.get('name', '')}",
+  "candidate_email": "{profile_data.get('email', '')}",
+  "candidate_phone": "{profile_data.get('phone', '') or ''}",
+  "candidate_location": "{profile_data.get('location', '') or ''}",
+  "linkedin_url": "{profile_data.get('linkedin', '') or ''}",
+  "portfolio_url": "{profile_data.get('portfolio', '') or ''}",
+
+  "matched_hard_skills": ["skills from profile that match JD"],
+  "matched_soft_skills": ["soft skills from profile that match JD"],
+  "missing_critical_skills": ["JD requirements not in profile"],
+  "missing_nice_to_have_skills": ["nice-to-haves not in profile"],
+  "transferable_skills": ["profile skills that map to JD requirements"],
+
+  "experience_entries": [
+    {{
+      "original_title": "job title from profile",
+      "company": "company",
+      "duration": "start - end",
+      "relevance_score": 80,
+      "relevant_keywords_found": ["kw1"],
+      "suggested_reorder_priority": 1
+    }}
+  ],
+
+  "education_entries": [
+    {{"degree": "", "institution": "", "year": "", "relevant_coursework": []}}
+  ],
+
+  "certifications": ["only certs in profile"],
+  "projects": [{{"name": "", "description": "", "technologies": []}}],
+
+  "ats_score_before": 45,
+  "gap_analysis": "2-3 sentence summary of gaps",
+  "reorder_strategy": "brief restructuring recommendation"
+}}"""
+
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=2500,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            response_text = response.content[0].text
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0]
+            json_start = response_text.find("{")
+            json_end = response_text.rfind("}") + 1
+            if json_start == -1 or json_end <= json_start:
+                raise ValueError("No JSON in v2 Stage 1 response")
+            return json.loads(response_text[json_start:json_end])
+        except Exception as e:
+            logger.error(f"v2 Stage 1 error: {e}")
+            raise
+
+    def generate_optimized_resume_v2(
+        self,
+        profile_data: dict,
+        resume_text: str,
+        analysis: dict,
+        job_title: str,
+        company_name: str,
+        job_description: str,
+        tone: str = "professional",
+    ) -> dict:
+        """
+        Stage 2 v2 — profile-constrained resume generation.
+        Only uses content that exists in the structured profile.
+        """
+        profile_json = json.dumps(profile_data, indent=2)
+        analysis_json = json.dumps(analysis, indent=2)
+
+        prompt = f"""You are a senior technical recruiter and professional resume writer.
+Rewrite this candidate's resume as a Hybrid Resume optimised for both ATS and human recruiters.
+
+STAGE 1 ANALYSIS:
+{analysis_json}
+
+STRUCTURED PROFILE (SOURCE OF TRUTH):
+{profile_json}
+
+RAW RESUME TEXT (style/phrasing reference only):
+{resume_text}
+
+TARGET JOB: {job_title} at {company_name}
+TONE: {tone}
+JOB DESCRIPTION:
+{job_description}
+
+━━━ PROFILE-BASED GENERATION RULES ━━━
+
+You have TWO data sources:
+1. STRUCTURED PROFILE — This is the SOURCE OF TRUTH. Every fact MUST trace back to a field in the profile.
+2. RAW RESUME TEXT — Style and phrasing reference only.
+
+HARD CONSTRAINTS:
+- Skills: ONLY use skills listed in the profile's skills object. Reorder and select the most relevant for the JD; do NOT add unlisted skills.
+- Experience: ONLY use experiences from the profile. Preserve job titles, company names, and dates EXACTLY.
+- Project bullets: You MAY rephrase bullets to better match the JD using STAR method, but core facts must be preserved. Do NOT invent metrics or achievements.
+- Certifications: ONLY include certifications from the profile. If none, omit the section entirely.
+- Education: Use exactly what's in the profile.
+- Contact info: Use exactly what's in the profile.
+
+You MAY:
+- Reorder sections and bullets to prioritise JD relevance.
+- Rephrase bullet points to use JD terminology.
+- Write a new professional summary highlighting the most relevant profile content.
+- Select a subset of skills most relevant to the JD.
+- Reframe project descriptions to emphasise JD-relevant aspects.
+
+━━━ FORMAT RULES ━━━
+- Professional Summary: 3-4 sentences, 60-80 words. Present tense. No "I". No skill lists.
+- Skills: split into technical_skills and professional_skills arrays, max 20 total.
+- Experience: preserve sub-project structure under each role using "projects" array.
+- NEVER add "(in progress)", proficiency qualifiers, or invented metrics.
+
+Return ONLY valid JSON — no markdown, no extra text:
+{{
+  "full_name": "from profile",
+  "contact": {{
+    "email": "from profile",
+    "phone": "from profile",
+    "location": "from profile",
+    "linkedin": "from profile",
+    "portfolio": "from profile"
+  }},
+  "professional_summary": "3-4 sentence hybrid summary",
+  "technical_skills": ["skill1", "skill2"],
+  "professional_skills": ["skill1", "skill2"],
+  "experience": [
+    {{
+      "title": "Job Title",
+      "company": "Company Name",
+      "location": "City or Remote",
+      "duration": "Mon YYYY - Mon YYYY",
+      "projects": [
+        {{
+          "name": "Sub-project name or empty string",
+          "bullets": ["Strong verb + what + tech/context + outcome"]
+        }}
+      ]
+    }}
+  ],
+  "education": [
+    {{
+      "degree": "Degree Name",
+      "institution": "Institution Name",
+      "year": "Year",
+      "details": "coursework/honors or empty string"
+    }}
+  ],
+  "certifications": ["only certs from profile"],
+  "projects": [
+    {{
+      "name": "Standalone project name",
+      "technologies": "Tech1, Tech2",
+      "bullets": ["What was built and why it matters"]
+    }}
+  ],
+  "ats_score_after": 85,
+  "keywords_added": ["kw1", "kw2"],
+  "key_improvements": ["Improvement 1", "Improvement 2"]
+}}"""
+
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=4000,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            response_text = response.content[0].text
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0]
+            json_start = response_text.find("{")
+            json_end = response_text.rfind("}") + 1
+            if json_start == -1 or json_end <= json_start:
+                raise ValueError("No JSON in v2 Stage 2 response")
+            return json.loads(response_text[json_start:json_end])
+        except Exception as e:
+            logger.error(f"v2 Stage 2 error: {e}")
             raise
 
     def interview_prep(
@@ -863,3 +1142,74 @@ GUIDANCE: [Hint about what good answer should cover]"""
             except Exception as e:
                 logger.error(f"Error during interview follow-up: {e}")
                 return {"status": "error", "message": str(e)}
+
+    async def extract_profile_from_resume(self, resume_text: str) -> Dict[str, Any]:
+        """Extract structured profile data from raw resume text."""
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=3000,
+            messages=[{"role": "user", "content": f"""Extract structured profile data from this resume. Return ONLY valid JSON.
+
+RESUME TEXT:
+{resume_text}
+
+Return this exact JSON structure:
+{{
+  "first_name": "",
+  "last_name": "",
+  "email": "",
+  "phone": "",
+  "location": "",
+  "linkedin_url": "",
+  "github_url": "",
+  "portfolio_url": "",
+  "professional_summary": "the existing summary as-is, don't rewrite",
+  "profile_headline": "a short headline derived from their current title and stack",
+  "skills": [
+    {{"name": "C#", "category": "language"}},
+    {{"name": "ASP.NET Core", "category": "framework"}},
+    {{"name": "SQL Server", "category": "database"}},
+    {{"name": "Azure DevOps", "category": "tool"}},
+    {{"name": "Problem Solving", "category": "soft_skill"}}
+  ],
+  "experiences": [
+    {{
+      "job_title": "",
+      "company": "",
+      "location": "",
+      "start_date": "Mon YYYY",
+      "end_date": "Mon YYYY or null if current",
+      "is_current": false,
+      "description": "brief role overview",
+      "projects": [
+        {{
+          "name": "Project Name (if mentioned)",
+          "description": "what the project is",
+          "technologies": "tech1, tech2",
+          "bullets": ["achievement 1 exactly as written in resume", "achievement 2"]
+        }}
+      ]
+    }}
+  ],
+  "education": [
+    {{"degree": "", "institution": "", "year": "", "details": ""}}
+  ],
+  "certifications": [
+    {{"name": "", "issuer": "", "date": ""}}
+  ]
+}}
+
+RULES:
+- Extract ONLY what is explicitly in the resume. Do NOT invent or infer anything.
+- For skills, categorize each into: language, framework, database, tool, cloud, soft_skill, other
+- Preserve project names that appear under experience entries
+- Keep bullet points exactly as written — do NOT rewrite them
+- If a field isn't present in the resume, use empty string or null
+- For certifications: ONLY include ones that are actually completed, not "in progress" or "recommended"
+"""}],
+        )
+        text = response.content[0].text
+        json_match = re.search(r'\{[\s\S]*\}', text)
+        if json_match:
+            return json.loads(json_match.group(0))
+        raise ValueError("Failed to parse profile from resume")

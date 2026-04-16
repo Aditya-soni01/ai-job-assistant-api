@@ -35,6 +35,7 @@ class UserResponse(UserBase):
     """Schema for user response data."""
     id: int
     is_active: bool
+    plan_tier: str = "starter"
     created_at: datetime
     updated_at: datetime
 

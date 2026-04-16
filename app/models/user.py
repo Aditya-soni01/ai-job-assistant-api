@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, JSON, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, JSON, DateTime, Boolean, Text
 from datetime import datetime
 
 from app.core.database import Base
@@ -7,21 +7,6 @@ from app.core.database import Base
 class User(Base):
     """
     User model representing a registered user of the Job Assistant.
-    
-    Attributes:
-        id: Primary key
-        email: Unique email address
-        username: Unique username
-        hashed_password: Bcrypt hashed password
-        first_name: User's first name
-        last_name: User's last name
-        skills: JSON array of user's professional skills
-        is_active: Whether the user account is active
-        created_at: Account creation timestamp
-        updated_at: Last account update timestamp
-    
-    Relationships:
-        - applications: One-to-many with Application model
     """
     __tablename__ = "users"
 
@@ -32,9 +17,24 @@ class User(Base):
     first_name = Column(String(255), nullable=True)
     last_name = Column(String(255), nullable=True)
     skills = Column(JSON, nullable=True, default=list)
+    # Subscription plan: "starter" | "job_seeker" | "interview_cracker"
+    plan_tier = Column(String(50), nullable=False, default="starter", server_default="starter")
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Profile fields
+    profile_headline = Column(String(200), nullable=True)
+    phone = Column(String(20), nullable=True)
+    location = Column(String(100), nullable=True)
+    linkedin_url = Column(String(300), nullable=True)
+    github_url = Column(String(300), nullable=True)
+    portfolio_url = Column(String(300), nullable=True)
+    professional_summary = Column(Text, nullable=True)
+    profile_completeness = Column(Integer, default=0)
+    preferences = Column(JSON, nullable=True)
+    is_profile_complete = Column(Boolean, default=False)
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email={self.email}, username={self.username})>"
